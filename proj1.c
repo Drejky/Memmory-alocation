@@ -6,9 +6,6 @@
 
 char* start;
 
-int a = 5;
-
-
 void *memory_alloc(unsigned int size) {
 	int hSize = sizeof(unsigned short) + sizeof(char);
 	int fSize = sizeof(unsigned short);
@@ -22,7 +19,7 @@ void *memory_alloc(unsigned int size) {
 			*(unsigned short*)curr = hSize + size + fSize;
 			*((char*)(curr + sizeof(unsigned short))) = 1;	//Rewriting header
 			*((unsigned short*)(curr + size + hSize)) = hSize + size + fSize;  //Creating new footer for allocated block
-			if (oldSize - hSize - fSize - size >= 5){			//If we have space left for another free block we give it a header and footer
+			if (oldSize - hSize - fSize - size >= hSize + fSize){			//If we have space left for another free block we give it a header and footer
 				*((unsigned short*)(curr + size + hSize + fSize)) = oldSize - hSize - fSize - size;		//New header for next free block
 				*((char*)(curr + size + hSize + fSize + sizeof(unsigned short))) = 0;
 				*((unsigned short*)(curr + oldSize - fSize)) = oldSize - hSize - fSize - size;	//Rewriting the original footer
@@ -49,50 +46,62 @@ int memory_free(void *valid_ptr) {
 	int fSize = sizeof(unsigned short);
 	char* curr = (char*)valid_ptr;
 	
-	prevSize = *((unsigned short*)(curr - hSize - fSize));
-	currSize = *((unsigned short*)(curr - hSize));
-
-
 	//Marking given block as free
 	*((char*)(curr - sizeof(char))) = 0;
 
-	//Defragmenting 
-	//FIX WHERE YOU CALCULATE SIZES
-	while ((curr - prevSize - hSize) > start) {		//While our curr pointer isnt out of bounds
-		//Getting the block sizes
-		prevSize = *((unsigned short*)(curr - hSize - fSize));
-		currSize = *((unsigned short*)(curr - hSize));
+	//Defragmenting with previous blocks
+	//LOOPS ARE USELESS FIX LATER
+	while ((curr - hSize) >= start + sizeof(unsigned short)) {		//While our curr pointer isnt out of bounds	
+		if ((curr - hSize) == start + sizeof(unsigned short)) {		//If we are on the first block
+			break;
+		}
+		else {		//If we aren't on the first block we calculate size of current and previous block
+			prevSize = *((unsigned short*)(curr - hSize - fSize));
+			currSize = *((unsigned short*)(curr - hSize));
+		}
 
-		//If we find that previous block is free
-		if ((curr - prevSize - hSize) > start && *((char*)(curr - prevSize - sizeof(char))) == 0) {	
+
+		if (*((char*)(curr - prevSize - sizeof(char))) == 0) {		//If previous block is free
 			newSize = currSize + prevSize;		//Calculating size of merged block
-			*((unsigned short*)(curr - prevSize - hSize)) = newSize;	//Asigning size to new blocks header
-			*((unsigned short*)(curr + currSize - hSize - fSize)) = newSize;
-			curr = curr - prevSize;
+			*((unsigned short*)(curr - hSize - prevSize)) = newSize;	//New blocks header
+			*((unsigned short*)(curr - hSize + currSize - fSize)) = newSize;	//New blocks footer
+			curr = curr - prevSize;		//Putting our cursor to the start of our new block
 			continue;
 		}
-		else
+		else {
 			break;
+		}
 	}
-	while ((curr + currSize) < (start + *((unsigned short*)start))) {	//While our curr pointer isnt out of bounds
-		currSize = *((unsigned short*)(curr - hSize));
-		nextSize = *((unsigned short*)(curr + currSize - hSize));
+	//Defragmenting with following blocks
+	while ((curr - hSize + *((unsigned short*)(curr - hSize))) <= (start + *((unsigned short*)start))) {	//While our curr pointer isnt out of bounds
+		if ((curr - hSize + *((unsigned short*)(curr - hSize))) == (start + *((unsigned short*)start))) {	//If we are on the last block
+			break;
+		}
+		else {		//If we aren't on the last block we calculate size of current and next block
+			currSize = *((unsigned short*)(curr - hSize));
+			nextSize = *((unsigned short*)(curr + currSize - hSize));
+		}
 
-		if ((curr + currSize) < (start + *((unsigned short*)start)) && *((char*)(curr + currSize - sizeof(char))) == 0) {
+		if (*((char*)(curr + currSize - sizeof(char))) == 0) {
 			newSize = currSize + nextSize;
 			*((unsigned short*)(curr - hSize)) = newSize;
 			*((unsigned short*)(curr - hSize + currSize + nextSize - fSize)) = newSize;
 			continue;
 		}
-		else
+		else {
 			break;
+		}
 	}
 
 	return 0;
 }
 
 int memory_check(void *ptr) {
-	return 0;
+	if (ptr == NULL) 
+		return 0;
+	
+
+
 }
 
 void memory_init(void *ptr, unsigned int size) {
@@ -106,16 +115,21 @@ void memory_init(void *ptr, unsigned int size) {
 
 int main()
 {
-	char region[52];
-	memory_init(region, 52);
-	char* pointer = (char*)memory_alloc(5);
-	char* pointer2 = (char*)memory_alloc(5);
-	char* pointer3 = (char*)memory_alloc(5);
-	char* pointer4 = (char*)memory_alloc(5);
+	char region[102];
+	memory_init(region, 102);
+	char* pointer = (char*)memory_alloc(1);
+	char* pointer2 = (char*)memory_alloc(1);
+	char* pointer3 = (char*)memory_alloc(1);
+	char* pointer4 = (char*)memory_alloc(1);
+	char* pointer5 = (char*)memory_alloc(1);
+	char* pointer6 = (char*)memory_alloc(1);
+	char* pointer7 = (char*)memory_alloc(1);
 
 	pointer[0] = 'u';
 	
-	memory_free(pointer);
+	memory_free(pointer7);
+	memory_free(pointer6);
+	memory_free(pointer5);
 	memory_free(pointer4);
 
 	return 0;
