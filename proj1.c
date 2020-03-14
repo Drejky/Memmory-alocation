@@ -14,7 +14,7 @@ void *memory_alloc(unsigned int size) {
 	char* curr = start + sizeof(unsigned short);	//Putting our pointer to the start of first block
 	
 	while (curr < (start + *((unsigned short*)start))) {
-		if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr > (hSize + fSize + size)) {
+		if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr > (hSize + fSize + size)) {	//If block is marked as free (char at thrid byte of header) and its size is big enough to hold our block
 			oldSize = *((unsigned short*)curr);
 			*(unsigned short*)curr = hSize + size + fSize;
 			*((char*)(curr + sizeof(unsigned short))) = 1;	//Rewriting header
@@ -37,7 +37,7 @@ void *memory_alloc(unsigned int size) {
 		}
 	}
 
-	return NULL;
+	return NULL;	//Return null if we didnt find a fitting free block
 }
 
 int memory_free(void *valid_ptr) {
@@ -45,6 +45,9 @@ int memory_free(void *valid_ptr) {
 	int hSize = sizeof(unsigned short) + sizeof(char);
 	int fSize = sizeof(unsigned short);
 	char* curr = (char*)valid_ptr;
+
+	if (!curr)
+		return 1;
 	
 	//Marking given block as free
 	*((char*)(curr - sizeof(char))) = 0;
@@ -59,7 +62,6 @@ int memory_free(void *valid_ptr) {
 			prevSize = *((unsigned short*)(curr - hSize - fSize));
 			currSize = *((unsigned short*)(curr - hSize));
 		}
-
 
 		if (*((char*)(curr - prevSize - sizeof(char))) == 0) {		//If previous block is free
 			newSize = currSize + prevSize;		//Calculating size of merged block
@@ -97,11 +99,18 @@ int memory_free(void *valid_ptr) {
 }
 
 int memory_check(void *ptr) {
-	if (ptr == NULL) 
-		return 0;
-	
+	int currSize;
+	int hSize = sizeof(unsigned short) + sizeof(char);
+	int fSize = sizeof(unsigned short);
 
+	if (ptr && ptr >= start && ptr <= (start + *((unsigned short*)start))) {	//If given pointer is valid and within our given block
+		currSize = *((unsigned short*)((char*)ptr - hSize));	//Calculating the size of given block
+		if (*((char*)((char*)ptr - sizeof(char))) == 1 && *((unsigned short*)((char*)ptr - hSize)) == *((unsigned short*)((char*)ptr - hSize + currSize - fSize))) {	//checking wether block has a valid header and footer and also if its allocated
+			return 1;
+		}
+	}
 
+	return 0;
 }
 
 void memory_init(void *ptr, unsigned int size) {
@@ -110,27 +119,29 @@ void memory_init(void *ptr, unsigned int size) {
 	*((unsigned short*)(start + sizeof(unsigned short))) = size - sizeof(unsigned short);		//Creating header for our first block
 	*((char*)start + 2*sizeof(unsigned short)) = 0;			//Marking our first block as free
 	*((unsigned short*)(start + size - sizeof(unsigned short))) = size - sizeof(unsigned short);		//Creating footer for our first block
-
 }
 
 int main()
 {
-	char region[102];
-	memory_init(region, 102);
-	char* pointer = (char*)memory_alloc(1);
-	char* pointer2 = (char*)memory_alloc(1);
-	char* pointer3 = (char*)memory_alloc(1);
-	char* pointer4 = (char*)memory_alloc(1);
-	char* pointer5 = (char*)memory_alloc(1);
-	char* pointer6 = (char*)memory_alloc(1);
-	char* pointer7 = (char*)memory_alloc(1);
-
-	pointer[0] = 'u';
+	char region[50];
+	memory_init(region, 50);
+	char* pointers[100];
 	
-	memory_free(pointer7);
-	memory_free(pointer6);
-	memory_free(pointer5);
-	memory_free(pointer4);
+	
+	for (int i = 0; i < 5; i++) {
+		pointers[i] = (char*)memory_alloc(8 * sizeof(char));
+	}
+	
+	for (int i = 0; i < 10; i++)
+		printf("%d ", memory_check(pointers[i]));
+	
+	for (int i = 0; i < 5; i++)
+		memory_free(pointers[i]);
+	printf("\n");
+
+	for (int i = 0; i < 10; i++)
+		printf("%d ", memory_check(pointers[i]));
+	
 
 	return 0;
 }
