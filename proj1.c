@@ -6,7 +6,7 @@
 
 char* start;
 
-void *memory_alloc(unsigned int size) {
+void *memory_alloc(unsigned int size) {	//FIX, ROUND UP THE ALOCATED MEMORY IF THERE ISNT ENOUGH SPACE LEFT FOR NEW EMPTY BLOCK
 	int hSize = sizeof(unsigned short) + sizeof(char);
 	int fSize = sizeof(unsigned short);
 	unsigned short oldSize;
@@ -16,14 +16,22 @@ void *memory_alloc(unsigned int size) {
 	while (curr < (start + *((unsigned short*)start))) {
 		if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr > (hSize + fSize + size)) {	//If block is marked as free (char at thrid byte of header) and its size is big enough to hold our block
 			oldSize = *((unsigned short*)curr);
-			*(unsigned short*)curr = hSize + size + fSize;
-			*((char*)(curr + sizeof(unsigned short))) = 1;	//Rewriting header
-			*((unsigned short*)(curr + size + hSize)) = hSize + size + fSize;  //Creating new footer for allocated block
-			if (oldSize - hSize - fSize - size >= hSize + fSize){			//If we have space left for another free block we give it a header and footer
+
+			if (oldSize - hSize - fSize - size >= hSize + fSize) {			//If we have space left for another free block we give it a header and footer
 				*((unsigned short*)(curr + size + hSize + fSize)) = oldSize - hSize - fSize - size;		//New header for next free block
 				*((char*)(curr + size + hSize + fSize + sizeof(unsigned short))) = 0;
 				*((unsigned short*)(curr + oldSize - fSize)) = oldSize - hSize - fSize - size;	//Rewriting the original footer
 			}
+			else {
+				size += oldSize - hSize - fSize - size;
+				//*((unsigned short*)start) -= oldSize - hSize - fSize - size;
+				//memset(curr + size + hSize + fSize, 1, oldSize - hSize - fSize - size);
+			}
+
+			*(unsigned short*)curr = hSize + size + fSize;
+			*((char*)(curr + sizeof(unsigned short))) = 1;	//Rewriting header
+			*((unsigned short*)(curr + size + hSize)) = hSize + size + fSize;  //Creating new footer for allocated block
+
 			return (void*)(curr + hSize);
 			
 		}
@@ -123,23 +131,29 @@ void memory_init(void *ptr, unsigned int size) {
 
 int main()
 {
-	char region[50];
-	memory_init(region, 50);
+	char region[200];
+	memory_init(region, 200);
+
 	char* pointers[100];
 	
 	
-	for (int i = 0; i < 5; i++) {
-		pointers[i] = (char*)memory_alloc(8 * sizeof(char));
+	for (int i = 0; i < 50; i++) {
+		pointers[i] = (char*)memory_alloc(8);
 	}
+
+	memory_free(pointers[2]);
+	memory_free(pointers[3]);
+	pointers[2] = (char*)memory_alloc(21);
+
 	
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 50; i++)
 		printf("%d ", memory_check(pointers[i]));
 	
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 50; i++)
 		memory_free(pointers[i]);
 	printf("\n");
 
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 50; i++)
 		printf("%d ", memory_check(pointers[i]));
 	
 
