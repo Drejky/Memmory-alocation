@@ -3,18 +3,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 char* start;
 
-void *memory_alloc(unsigned int size) {	//FIX, ROUND UP THE ALOCATED MEMORY IF THERE ISNT ENOUGH SPACE LEFT FOR NEW EMPTY BLOCK
-	int hSize = sizeof(unsigned short) + sizeof(char);
-	int fSize = sizeof(unsigned short);
+void *memory_alloc(unsigned int size) {	
+	int hSize = sizeof(unsigned short) + sizeof(char);		//Header size
+	int fSize = sizeof(unsigned short);					//Footer size
 	unsigned short oldSize;
 
 	char* curr = start + sizeof(unsigned short);	//Putting our pointer to the start of first block
 	
 	while (curr < (start + *((unsigned short*)start))) {
-		if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr > (hSize + fSize + size)) {	//If block is marked as free (char at thrid byte of header) and its size is big enough to hold our block
+		if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr >= (hSize + fSize + size)) {	//If block is marked as free (char at thrid byte of header) and its size is big enough to hold our block
 			oldSize = *((unsigned short*)curr);
 
 			if (oldSize - hSize - fSize - size >= hSize + fSize) {			//If we have space left for another free block we give it a header and footer
@@ -23,21 +24,15 @@ void *memory_alloc(unsigned int size) {	//FIX, ROUND UP THE ALOCATED MEMORY IF T
 				*((unsigned short*)(curr + oldSize - fSize)) = oldSize - hSize - fSize - size;	//Rewriting the original footer
 			}
 			else {
-				size += oldSize - hSize - fSize - size;
-				//*((unsigned short*)start) -= oldSize - hSize - fSize - size;
-				//memset(curr + size + hSize + fSize, 1, oldSize - hSize - fSize - size);
+				size += oldSize - hSize - fSize - size;		//If there isn't enough space for a new block we give the block padding
 			}
 
 			*(unsigned short*)curr = hSize + size + fSize;
 			*((char*)(curr + sizeof(unsigned short))) = 1;	//Rewriting header
-			*((unsigned short*)(curr + size + hSize)) = hSize + size + fSize;  //Creating new footer for allocated block
+			*((unsigned short*)(curr + hSize + size)) = hSize + size + fSize;  //Creating new footer for allocated block
 
 			return (void*)(curr + hSize);
 			
-		}
-		else if (*((char*)curr + sizeof(unsigned short)) == 0 && *(unsigned short*)curr == (hSize + fSize + size)) {	//If the free block fits perfectly we just mark it as allocated and return pointer
-			*((char*)(curr + sizeof(unsigned short))) = 1;
-			return (void*)(curr + hSize);
 		}
 		else {			//Moving to the next block
 			curr += *((unsigned short*)curr);
@@ -60,46 +55,27 @@ int memory_free(void *valid_ptr) {
 	//Marking given block as free
 	*((char*)(curr - sizeof(char))) = 0;
 
-	//Defragmenting with previous blocks
-	//LOOPS ARE USELESS FIX LATER
-	while ((curr - hSize) >= start + sizeof(unsigned short)) {		//While our curr pointer isnt out of bounds	
-		if ((curr - hSize) == start + sizeof(unsigned short)) {		//If we are on the first block
-			break;
-		}
-		else {		//If we aren't on the first block we calculate size of current and previous block
-			prevSize = *((unsigned short*)(curr - hSize - fSize));
-			currSize = *((unsigned short*)(curr - hSize));
-		}
-
-		if (*((char*)(curr - prevSize - sizeof(char))) == 0) {		//If previous block is free
-			newSize = currSize + prevSize;		//Calculating size of merged block
-			*((unsigned short*)(curr - hSize - prevSize)) = newSize;	//New blocks header
-			*((unsigned short*)(curr - hSize + currSize - fSize)) = newSize;	//New blocks footer
-			curr = curr - prevSize;		//Putting our cursor to the start of our new block
-			continue;
-		}
-		else {
-			break;
-		}
-	}
-	//Defragmenting with following blocks
-	while ((curr - hSize + *((unsigned short*)(curr - hSize))) <= (start + *((unsigned short*)start))) {	//While our curr pointer isnt out of bounds
-		if ((curr - hSize + *((unsigned short*)(curr - hSize))) == (start + *((unsigned short*)start))) {	//If we are on the last block
-			break;
-		}
-		else {		//If we aren't on the last block we calculate size of current and next block
-			currSize = *((unsigned short*)(curr - hSize));
-			nextSize = *((unsigned short*)(curr + currSize - hSize));
-		}
+	//Merging with following block
+	if (!((curr - hSize + *((unsigned short*)(curr - hSize))) == (start + *((unsigned short*)start)))) {	//If we aren't on the last block
+		currSize = *((unsigned short*)(curr - hSize));
+		nextSize = *((unsigned short*)(curr + currSize - hSize));
 
 		if (*((char*)(curr + currSize - sizeof(char))) == 0) {
 			newSize = currSize + nextSize;
 			*((unsigned short*)(curr - hSize)) = newSize;
 			*((unsigned short*)(curr - hSize + currSize + nextSize - fSize)) = newSize;
-			continue;
 		}
-		else {
-			break;
+	}
+
+	//Merging with previous block	
+	if (!((curr - hSize) == start + sizeof(unsigned short))) {		//If we aren't on the first block
+		prevSize = *((unsigned short*)(curr - hSize - fSize));
+		currSize = *((unsigned short*)(curr - hSize));
+
+		if (*((char*)(curr - prevSize - sizeof(char))) == 0) {		//If previous block is free
+			newSize = currSize + prevSize;		//Calculating size of merged block
+			*((unsigned short*)(curr - hSize - prevSize)) = newSize;	//New blocks header
+			*((unsigned short*)(curr - hSize + currSize - fSize)) = newSize;	//New blocks footer
 		}
 	}
 
@@ -107,14 +83,18 @@ int memory_free(void *valid_ptr) {
 }
 
 int memory_check(void *ptr) {
-	int currSize;
 	int hSize = sizeof(unsigned short) + sizeof(char);
 	int fSize = sizeof(unsigned short);
 
+	char* curr = start + sizeof(unsigned short);
+
 	if (ptr && ptr >= start && ptr <= (start + *((unsigned short*)start))) {	//If given pointer is valid and within our given block
-		currSize = *((unsigned short*)((char*)ptr - hSize));	//Calculating the size of given block
-		if (*((char*)((char*)ptr - sizeof(char))) == 1 && *((unsigned short*)((char*)ptr - hSize)) == *((unsigned short*)((char*)ptr - hSize + currSize - fSize))) {	//checking wether block has a valid header and footer and also if its allocated
-			return 1;
+		while (curr < (start + *((unsigned short*)start))) {
+			if (*((char*)((char*)ptr - sizeof(char))) == 1 && ptr == (curr + hSize)) {	//checking wether block is allocated and if it matches current blocks returned pointer
+				return 1;
+			}
+			else
+				curr += *((unsigned short*)curr);
 		}
 	}
 
@@ -129,35 +109,182 @@ void memory_init(void *ptr, unsigned int size) {
 	*((unsigned short*)(start + size - sizeof(unsigned short))) = size - sizeof(unsigned short);		//Creating footer for our first block
 }
 
-int main()
-{
-	char region[200];
-	memory_init(region, 200);
+int rando(int low, int high) {	//random numbers for testing
+	return rand() % (high - low + 1) + low;
+}
+
+void test_sameSmall() {
+	printf("Test sameSmall\n");
+	char region[50];
+	memory_init(region, 50);
 
 	char* pointers[100];
-	
-	
+
 	for (int i = 0; i < 50; i++) {
 		pointers[i] = (char*)memory_alloc(8);
 	}
 
-	memory_free(pointers[2]);
-	memory_free(pointers[3]);
-	pointers[2] = (char*)memory_alloc(21);
-
-	
 	for (int i = 0; i < 50; i++)
 		printf("%d ", memory_check(pointers[i]));
-	
+
 	for (int i = 0; i < 50; i++)
 		memory_free(pointers[i]);
 	printf("\n");
 
 	for (int i = 0; i < 50; i++)
 		printf("%d ", memory_check(pointers[i]));
-	
+	printf("\n-----------------------------------------------\n");
+}
+
+void test_randSmall() {
+	printf("Test randSmall\n");
+	char region[150];
+	memory_init(region, 150);
+	srand(time(0));
+
+	char* pointers[100];
+
+	for (int i = 0; i < 50; i++) {
+		pointers[i] = (char*)memory_alloc(rando(8,24));
+	}
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+
+	for (int i = 0; i < 50; i++)
+		memory_free(pointers[i]);
+	printf("\n");
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+	printf("\n-----------------------------------------------\n");
+}
+
+void test_randBig() {
+	printf("Test randBig\n");
+	char region[10000];
+	memory_init(region, 10000);
+	srand(time(0));
+
+	char* pointers[100];
+
+	for (int i = 0; i < 50; i++) {
+		pointers[i] = (char*)memory_alloc(rando(500, 5000));
+	}
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+
+	for (int i = 0; i < 50; i++)
+		memory_free(pointers[i]);
+	printf("\n");
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+	printf("\n-----------------------------------------------\n");
+
+}
+
+void test_randMix() {
+	printf("Test randMix\n");
+	char region[50000];
+	memory_init(region, 50000);
+	srand(time(0));
+
+	char* pointers[100];
+
+	for (int i = 0; i < 50; i++) {
+		pointers[i] = (char*)memory_alloc(rando(8, 50000));
+	}
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+
+	for (int i = 0; i < 50; i++)
+		memory_free(pointers[i]);
+	printf("\n");
+
+	for (int i = 0; i < 50; i++)
+		printf("%d ", memory_check(pointers[i]));
+	printf("\n-----------------------------------------------\n");
+
+}
+
+void test_freeFirst() {
+	char region[32];
+	memory_init(region, 32);
+
+	char* pointers[100];
+
+	for (int i = 0; i < 3; i++)
+		pointers[i] = (char*)memory_alloc(5);
+	memory_free(pointers[0]);
+}
+
+void test_freeLast() {
+	char region[32];
+	memory_init(region, 32);
+
+	char* pointers[100];
+
+	for (int i = 0; i < 3; i++)
+		pointers[i] = (char*)memory_alloc(5);
+	memory_free(pointers[2]);
+}
+
+void test_freeMergeLeft() {
+	char region[32];
+	memory_init(region, 32);
+
+	char* pointers[100];
+
+	for (int i = 0; i < 3; i++)
+		pointers[i] = (char*)memory_alloc(5);
+
+	for(int i = 2; i >= 0; i--)
+		memory_free(pointers[i]);
+}
+
+void test_freeMergeRight() {
+	char region[32];
+	memory_init(region, 32);
+
+	char* pointers[100];
+
+	for (int i = 0; i < 3; i++)
+		pointers[i] = (char*)memory_alloc(5);
+
+	for (int i = 0; i < 3; i++)
+		memory_free(pointers[i]);
+}
+
+void test_freeMergeBoth() {
+	char region[32];
+	memory_init(region, 32);
+
+	char* pointers[100];
+
+	for (int i = 0; i < 3; i++)
+		pointers[i] = (char*)memory_alloc(5);
+
+	memory_free(pointers[0]);
+	memory_free(pointers[2]);
+	memory_free(pointers[1]);
+}
+
+int main()
+{
+	//test_sameSmall();
+	//test_randSmall();
+	//test_randBig();
+	//test_randMix();
+
+	//test_freeFirst();
+	//test_freeLast();
+	//test_freeMergeLeft();
+	//test_freeMergeRight();
+	//test_freeMergeBoth();
 
 	return 0;
 }
 
-//unsigned byte uwu;
